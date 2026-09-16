@@ -48,5 +48,5 @@ asset.meta = {
   Imagery. "NOAA20 SNPP (Temporal)" is faded out at tile level 4]],
   Author = "OpenSpace Tem",
   URL = "http://www.openspaceproject.com",
-  License = "MIT License"
+  License = "ESRI Masters Agreement (ESRI) + Public Domain (NOAA20 VIIRS) + MIT License (OpenSpace)" -- Need ArcGIS license?
 }
