@@ -22,69 +22,65 @@
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                                         *
  ****************************************************************************************/
 
-#include <openspace/properties/list/intlistproperty.h>
+#include <catch2/catch_test_macros.hpp>
 
-#include <openspace/lua/lua.h>
+#include <openspace/engine/globals.h>
 #include <openspace/lua/lua_helper.h>
+#include <openspace/scripting/scriptengine.h>
+#include <string>
 
-namespace openspace {
+using namespace openspace;
 
-IntListProperty::IntListProperty(PropertyInfo info, std::vector<int> values)
-    : ListProperty(std::move(info), std::move(values))
-{}
+namespace {
+    // Runs the script, which has to assign its result to the global `Result`, and
+    // returns that value as a string
+    std::string runAndGetResult(const std::string& script) {
+        lua_State* state = *global::scriptEngine->luaState();
+        lua::runScript(state, script);
+        lua_getglobal(state, "Result");
+        std::string res = lua::value<std::string>(state);
+        lua_pushnil(state);
+        lua_setglobal(state, "Result");
+        return res;
+    }
+} // namespace
 
-IntListProperty::IntListProperty(PropertyInfo info, IsEnabled isEnabled,
-                                 std::vector<int> values)
-    : ListProperty(std::move(info), isEnabled, std::move(values))
-{}
-
-std::string_view IntListProperty::className() const {
-    return "IntListProperty";
+TEST_CASE("FactoryConstructors: Sets Type", "[factoryconstructors]") {
+    CHECK(
+        runAndGetResult("Result = Renderable.RenderableTrailOrbit().Type") ==
+        "RenderableTrailOrbit"
+    );
+    CHECK(
+        runAndGetResult("Result = Translation.StaticTranslation().Type") ==
+        "StaticTranslation"
+    );
 }
 
-lua::LuaTypes IntListProperty::typeLua() const {
-    return lua::LuaTypes::Table;
+TEST_CASE("FactoryConstructors: Returns New Tables", "[factoryconstructors]") {
+    CHECK(
+        runAndGetResult(
+            "local a = Renderable.RenderableTrailOrbit()\n"
+            "local b = Renderable.RenderableTrailOrbit()\n"
+            "a.Period = 2.5\n"
+            "Result = tostring(rawequal(a, b)) .. ' ' .. tostring(b.Period)"
+        ) == "false nil"
+    );
 }
 
-void IntListProperty::getLuaValue(lua_State* state) const {
-    lua::push(state, _value);
+TEST_CASE("FactoryConstructors: SceneGraphNode", "[factoryconstructors]") {
+    CHECK(
+        runAndGetResult(
+            "local sgn = SceneGraphNode()\n"
+            "Result = type(sgn) .. ' ' .. tostring(next(sgn))"
+        ) == "table nil"
+    );
+    lua_State* state = *global::scriptEngine->luaState();
+    CHECK_THROWS(lua::runScript(state, "SceneGraphNode({})"));
 }
 
-std::vector<int> IntListProperty::toValue(lua_State* state) const {
-    return lua::value<std::vector<int>>(state);
+TEST_CASE("FactoryConstructors: Errors", "[factoryconstructors]") {
+    lua_State* state = *global::scriptEngine->luaState();
+    CHECK_THROWS(lua::runScript(state, "Renderable.RenderableTrailOrbit({})"));
+    CHECK_THROWS(lua::runScript(state, "Renderable.RenderableTrailOrbit(nil)"));
+    CHECK_THROWS(lua::runScript(state, "Renderable.DoesNotExist()"));
 }
-
-std::string IntListProperty::stringValue() const {
-    const nlohmann::json json = _value;
-    return json.dump();
-}
-
-nlohmann::json IntListProperty::Schema() {
-    nlohmann::json metaData = TemplateProperty<std::vector<int>>::MetaDataSchema();
-    metaData["properties"]["type"] = { { "const", "IntListProperty" } };
-    metaData["required"].push_back("type");
-    nlohmann::json sharedDefs = ExtractDefs(metaData);
-
-    nlohmann::json typeDef = nlohmann::json::parse(R"(
-        {
-          "type": "object",
-          "properties": {
-            "uri": { "type": "string" },
-            "value": {
-              "type": "array",
-              "items": { "type": "number" }
-            }
-          },
-          "additionalProperties": false,
-          "required": ["metaData", "uri", "value"]
-        }
-    )");
-    typeDef["properties"]["metaData"] = metaData;
-
-    nlohmann::json schema;
-    schema["$defs"] = sharedDefs;
-    schema["typedefs"]["IntListProperty"] = typeDef;
-    return schema;
-}
-
-} // namespace openspace
